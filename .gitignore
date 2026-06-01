@@ -1,0 +1,11 @@
+/x-*
+/.vscode
+/*.inc
+/*.bin
+/*.rom
+/*.lst
+/*.txt
+/*.zx0
+/*.psn
+/*.ptp
+/SpriteRotate
