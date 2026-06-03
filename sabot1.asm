@@ -614,9 +614,6 @@ LB061:	DEFM "00  $"
 ; String 18 spaces
 LDEE6:	DEFM "                  "
 
-; String 10 spaces
-;LB0E8:	DEFM "          "
-
 LB0F2:	DEFM "EXCELLENT WORK."
 LB101:	DEFM "YOU ARE ONE OF"
 LB10F:	DEFM " OUR TEN BEST"
@@ -638,20 +635,35 @@ LBF67:	DEFM "  MISSION FAILURE   "
 LC062:	DEFM "DISK RETRIEVED"
 LC070:	DEFM "DISK "
 LC075:	DEFM "BONUS: $05000"
-LC082:	DEFM "LEVEL "
-LEVED:	DEFM "1"	; Current Level digit
 LC087:	DEFM "TOTAL PAY : $"
 
 TITLE:	DEFM "SABOTEUR 1 PMD-85"
+
+; Menu text block
+MENUTXT:
+	DEFB VERSZ
 VERSION:
 	INCLUDE "version.inc"
 VERSZ = $ - VERSION
-LDF27:	DEFM "START MISSION"
+	DEFB $00,$00,$00
+	DEFB 7
+LC082:	DEFM "LEVEL "
+LEVED:	DEFM "1"	; Current Level digit
+	DEFB $00,$00
+	DEFB 13
+	DEFM "START MISSION"
+	DEFB $00,$00
+	DEFB 11
 	DEFM "INFORMATION"
+	DEFB $FF
 
-LE204:	DEFM "YOUR MISSION"
-LE210:	DEFM "WILL BE"
+LE204:	DEFB 12
+	DEFM "YOUR MISSION"
+	DEFB 9
+	DEFM "  WILL BE"
+	DEFB $FF
 
+; Information screen text block
 SINFO:	DEFB 13
 	DEFM "ORIGINAL GAME"
 	DEFB 4
@@ -669,6 +681,8 @@ SINFO:	DEFB 13
 	DEFB 9
 	DEFM "CONTROLS:"
 	DEFB $00
+	DEFB 12
+	DEFM "UP/DOWN: Q/A"
 	DEFB 12
 	DEFM "LEFT:  < O 9"
 	DEFB 12
@@ -722,6 +736,7 @@ L628F:
 	JP NZ,L_BLOCKCOPY
 	; 00xxxxxx - literal byte
 	LD A,C
+	or $40		; gray color
 	LD (DE),A
 	INC DE
 	JP L628F
@@ -736,6 +751,7 @@ L_BIT7SET:
 	LD B,(HL)	; B = repeat count (3..255)
 	INC HL
 L_FILLLOOP:
+	or $40		; gray color
 	LD (DE),A	; A unchanged by INC/DEC
 	INC DE
 	DEC B
@@ -748,6 +764,7 @@ L_BLOCKCOPY:
         LD B,A
 L_BLKLOOP:
         LD A,(HL)
+	or $40		; gray color
         LD (DE),A
         INC HL
         INC DE
@@ -760,7 +777,7 @@ L_SPECIAL:
 	AND $3F		; bits 0-5
 	INC A		; count: 1..64
 	LD B,A
-	LD C,$2A	; seed: 0x2A (00101010)
+	LD C,$6A	; seed: 0x6A (01101010)
 L_PATLOOP:
 	LD A,C
 	LD (DE),A
@@ -2289,6 +2306,24 @@ LAD1D:
 	DEFB 4
 	RET
 
+; Print text block
+; DE = screen address
+; HL = block start
+PRSTRB:
+.l50:	ld a,(hl)
+	inc hl
+	or a
+	jp z,.l60	; => next line
+	cp $FF
+	ret z		; => end of text
+	ld c,a		; string length
+	push de
+	call PRSTR	; Print string
+	pop de
+.l60:	inc D		; 4 lines lower
+	inc D		; 8 lines lower
+	jp .l50
+
 ; Print string on the screen, two arguments after the CALL statement
 ; 1st word = screen address, 2nd byte = length
 ; HL = string address
@@ -3634,7 +3669,7 @@ LB937:
 	ld A,(LB695+2)	; get Guard data higher byte
 	or A
 	jp nz,LB937_2	; have Guard => skip
-	ld HL,TLSCR1+8*30
+	ld HL,TLSCR1+15*30
 	ld B,30
 	ld A,1		; "need update" mark
 .loop:	ld (HL),A
@@ -4509,32 +4544,35 @@ LC094:	LD HL,MVTCN	; counter address
 	in A,(SysPC)
 	or 4
 	out (SysPC),A	; sound on
-	ld HL,SCRTOP+$0704
-	ld DE,SCRTOP+$0700
+	ld HL,SCRGME+6+$40*3
+	ld DE,SCRGME+6
 ; Scroll 17 columns x 120 lines, 4 lines up
-	ld B,15*8
+	ld B,15*6
 .loop2:
 	PUSH HL
 	PUSH DE
 	ld C,17
 .loop:	ld a,(hl)
 	ld (de),a
-	inc H
-	inc D
+	inc L		; one column right
+	inc E		; one column right
 	dec C
 	jp nz,.loop
 	POP DE
 	POP HL
-	inc E
-	inc L
+	ld A,B		; save counter
+	ld BC,$0040
+	ex DE,HL
+	add HL,BC	; next line
+	ex DE,HL
+	add HL,BC	; next line
+	ld B,A		; restore counter
 	dec B
 	jp nz,.loop2
 	in A,(SysPC)
 	and $F8
 	out (SysPC),A	; sound off
 	JP LB8D0	; => Update Ninja on tilemap
-;
-	ret
 
 ; Ninja on ladder
 LC12E:	LD HL,LC3D9	; Movement handler for Ninja on ladder
@@ -5391,21 +5429,9 @@ LDF60:	;ei
 	CALL PRSTRS	; Print title string
 	DEFW SCRTOP+$020D
 	DEFB 17
-	CALL PRSTRS	; Print version string
-	DEFW SCRTOP+$060F
-	DEFB VERSZ
-	LD HL,LC082
-	CALL PRSTRS	; Print string "LEVEL N"
-	DEFW SCRTOP+$0C0F
-	DEFB 7
-	LD HL,LDF27
-	CALL PRSTRS	; Print string "START MISSION"
-	DEFW SCRTOP+$120F
-	DEFB 13
-	CALL PRSTRS	; Print string "INFORMATION"
-	DEFW SCRTOP+$160F
-	DEFB 11
-;
+	LD HL,MENUTXT
+	ld DE,SCRTOP+$060F
+	call PRSTRB	; Print text block
 	;CALL LE04D	; Clear key buffer playing melody
 	CALL LDFDB	; Highlight Menu item
 	LD DE,$00D4
@@ -5421,7 +5447,7 @@ LDF97:	PUSH DE
 	jp z, MENUS
 	jp MENUI
 ; Menu item "LEVEL"
-MENUL:	ld hl,SCRTOP+$0C0F+$1C0
+MENUL:	ld hl,SCRTOP+$0E0F+$200
 	ld (LDFDB+1),hl
 	call LDFDB	; Highlight Menu item
 .l00:	call ReadInput
@@ -5453,7 +5479,7 @@ MENUL:	ld hl,SCRTOP+$0C0F+$1C0
 	;TODO: check Fire
 	jp .l00
 ; Menu item "START MISSION"
-MENUS:	ld hl,SCRTOP+$120F+$1C0
+MENUS:	ld hl,SCRTOP+$140F+$200
 	ld (LDFDB+1),hl
 	call LDFDB	; Highlight Menu item
 .l00:	call ReadInput
@@ -5476,7 +5502,7 @@ MENUS:	ld hl,SCRTOP+$120F+$1C0
 	call WaitNoInput
 	jp LE2A7	; => Start Mission
 ; Menu item "INFORMATION"
-MENUI:	ld hl,SCRTOP+$160F+$1C0
+MENUI:	ld hl,SCRTOP+$1A0F+$200
 	ld (LDFDB+1),hl
 	call LDFDB	; Highlight Menu item
 .l00:	call ReadInput
@@ -5497,20 +5523,8 @@ MENUI:	ld hl,SCRTOP+$160F+$1C0
 	CALL LDEC1	; Clear strings on the screen
 	LD HL,SINFO
 	LD DE,SCRTOP+$060F
-.l50:	ld a,(hl)
-	inc hl
-	or a
-	jp z,.l60	; => next line
-	cp $FF
-	jp z,.l70	; => end of text
-	ld c,a		; string length
-	push de
-	call PRSTR	; Print string
-	pop de
-.l60:	inc D		; 4 lines lower
-	inc D		; 8 lines lower
-	jp .l50
-.l70:	call WaitNoInput
+	call PRSTRB	; Print text block
+	call WaitNoInput
 	call WaitAnyInput
 	jp LDF60
 
@@ -5533,7 +5547,7 @@ LDFD4:	;XOR A
 	;RET
 
 ; Highlight Menu item
-LDFDB:	LD HL,SCRTOP+$120F+$1C0
+LDFDB:	LD HL,SCRTOP+$140F+$200
 	LD B,$0D
 LDFE0:	LD (HL),$55
 	inc L
@@ -5563,12 +5577,8 @@ LE2A7:	CALL LDFE6	; Unhighlight Menu item
 	CALL LDEC1	; Clear strings on the screen
 ;NOTE: "ENTER SKILL LEVEL" - moved to Menu
 	LD HL,LE204	; "YOUR MISSION"
-	CALL PRSTRS	; Print string "YOUR MISSION"
-	DEFW SCRTOP+$080E
-	DEFB 12
-	CALL PRSTRS	; Print string "WILL BE"
-	DEFW SCRTOP+$0A11
-	DEFB 7
+	ld DE,SCRTOP+$080F
+	CALL PRSTRB	; Print text block
 	LD A,(LEVED)	; get Skill level
 	SUB $31
 	LD L,A
@@ -5580,7 +5590,7 @@ LE2A7:	CALL LDFE6	; Unhighlight Menu item
 	LD DE,LE217	; Levels data base address
 	ADD HL,DE
 	CALL PRSTRS	; Print string - level description
-	DEFW SCRTOP+$0E0D
+	DEFW SCRTOP+$0E0E
 	DEFB $0E
 	LD A,(HL)
 	INC HL
