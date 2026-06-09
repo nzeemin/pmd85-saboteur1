@@ -790,6 +790,7 @@ L84A8:	DEFW	LB41F	; Room procedure
 	DEFRTBK	0, TLSCR5+273		; Barrel 3x3 tiles at 7097
 	DEFRTBK	3, TLSCR5+382		; Block 4x3 tiles from 7E7B to 7104
 	DEFRTBL	15, 5,3, TLSCR5+364	; Block 5x3 tiles from 84DF to 70F2
+	DEFRTBL	48, 3,6, TLSCR0+74	; Crane block 3x6 tiles from F98F to 65DA
 	DEFB	$00	; End of sequence
 
 ; Room 84EE

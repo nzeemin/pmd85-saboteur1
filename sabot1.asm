@@ -13,7 +13,8 @@ CVERT  EQU 0	; Cheat code for short route to Helicopter
 ;CBOMB EQU 0	; Cheat code for carrying BOMB
 CSHORT EQU 0	; Cheat code for small map used to test main features
 
-SCRTOP EQU $CC08	; Game screen start address
+SCRTOP EQU $CE08	; Game screen start address
+SCRTLE EQU $C189	; Title sign screen address
 SCRMP  EQU SCRTOP-$0203	; Menu picture screen address
 SCRGME EQU SCRTOP+$0181	; Game screen inside the frame start address
 SCRIND EQU SCRTOP+$180*19 ; Screen address for first indicators line
@@ -713,6 +714,86 @@ LDDR_B:
 	dec b
 	jp nz,.loop
 	ret
+
+;----------------------------------------------------------------------------
+
+; ZX0 decompressor code by Ivan Gorodetsky
+; https://github.com/ivagorRetrocomp/DeZX/blob/main/ZX0/8080/OLD_V1/dzx0_CLASSIC.asm
+; input:	de=compressed data start
+;		bc=uncompressed destination start
+;NOTE: FORWARD decompression only
+dzx0:
+		ld hl,0FFFFh
+		push HL
+		inc HL
+		ld A,080h
+dzx0_literals:
+		call dzx0_elias
+		call dzx0_ldir
+		jp c,dzx0_new_offset
+		call dzx0_elias
+dzx0_copy:
+		ex DE,HL
+		ex (SP),HL
+		push HL
+		add HL,BC
+		ex DE,HL
+		call dzx0_ldir
+		ex DE,HL
+		pop HL
+		ex (SP),HL
+		ex DE,HL
+		jp NC,dzx0_literals
+dzx0_new_offset:
+		call dzx0_elias
+		ld H,A
+		pop AF
+		xor A
+		sub L
+		ret z
+		push HL
+		rra
+		ld H,A
+		ld A,(DE)
+		rra
+		ld L,A
+		inc de
+		ex (SP),HL
+		ld A,H
+		ld HL,1
+		call nc,dzx0_elias_backtrack
+		inc HL
+		jp dzx0_copy
+dzx0_elias:
+		inc L
+dzx0_elias_loop:
+		add A,A
+		jp NZ,dzx0_elias_skip
+		ld A,(de)
+		inc DE
+		rla
+dzx0_elias_skip:
+		ret C
+dzx0_elias_backtrack:
+		add HL,HL
+		add A,A
+		jp NC,dzx0_elias_loop
+		jp dzx0_elias
+
+dzx0_ldir:
+		push AF
+dzx0_ldir1:
+		ld A,(DE)
+		ld (BC),A
+		inc DE
+		inc BC
+		dec HL
+		ld A,H
+		or L
+		jp nz,dzx0_ldir1
+		pop AF
+		add A,A
+		ret
 
 ;----------------------------------------------------------------------------
 
@@ -2226,23 +2307,49 @@ LAC6E:	POP HL
 	jp nz,LAC5C
 	RET
 
+; Show title picture with big "SABOTEUR!" sign at the top
+SHOWTITLE:
+	LD DE,TPICT	; Title picture ZX0 encoded sequence
+	ld BC,TLSCR0	; destination addr (using TLSCR0 as buffer)
+	call dzx0
+; Draw title picture on the screen
+	LD HL,TLSCR0	; HL = tile stream, 34*24 tiles
+	LD DE,SCRTLE	; DE = screen destination
+	ld C,35		; 35 lines
+.lineloop:
+	ld B,30		; 30 columns
+.colloop:
+	ld A,(HL)
+	inc HL
+	or $40		; gray color
+	ld (DE),A
+	inc E
+	dec B
+	jp nz,.colloop
+	ld A,E
+	add $40-30	; 30 columns left, +1 line down
+	jp nc,.skip2
+	inc D
+.skip2:	ld E,A
+	dec c
+	jp nz,.lineloop
+	ret
+
 ; Draw game screen frames and indicator text
-LACCA:	LD HL,SCRTOP	; Screen start address
-	LD DE,LAD65	; Game screen frames/indicators RLE encoded sequence
-LACD5:	LD A,(DE)
-	PUSH DE
-	LD C,$01
-	CP $FF
-	JP Z,LAD1D
-	CP $17
-	JP C,LACE8
-	SUB $14
-	LD C,A
-	POP DE
-	INC DE
-	LD A,(DE)
-	PUSH DE
-LACE8:	PUSH HL
+LACCA:	LD DE,LAD65	; Game screen frames/indicators ZX0 encoded sequence
+	ld BC,TLSCR0	; destination addr (using TLSCR0 as buffer)
+	call dzx0
+; Draw tiles from buffer to screen
+	LD HL,TLSCR0	; HL = tile stream, 34*24 tiles
+	LD DE,SCRTOP-1	; DE = screen destination
+	ld C,24		; 24 rows
+.rowloop:
+	;ld B,34		; 34 tiles per row
+.tileloop:
+	LD A,(HL)
+	inc HL
+	push HL		; save sequence address
+	push DE		; save screen address
 	add A,A		; * 2
 	LD H,$00
 	LD L,A
@@ -2252,11 +2359,11 @@ LACE8:	PUSH HL
 	ADD HL,DE	; * 6
 	LD DE,LAE02	; Indicator tiles address
 	ADD HL,DE
-	POP DE
-LACF7:	LD B,$06	; tile height
-	PUSH HL
-	PUSH DE
-LACFB:	LD A,(HL)
+	pop DE		; restore screen address
+	push DE
+	LD B,6		; tile height
+.drawloop:
+	LD A,(HL)
 	LD (DE),A
 	INC HL
 	ld A,E
@@ -2265,29 +2372,23 @@ LACFB:	LD A,(HL)
 	inc D
 .skipc:	ld E,A
 	dec b
-	jp nz,LACFB
-	LD A,(HL)
+	jp nz,.drawloop
 	POP DE		; restore screen address
+	pop HL		; restore sequence address
 	inc E		; next column
 	ld A,E
 	and $3F
-	cp (SCRTOP&$1F)+32 ; end of line?
-	jp nz,.l10
+	cp ((low SCRTOP)&$3F)+33 ; end of line?
+	jp nz,.tileloop
 	ld A,E
-	add $80-32	; 30 columns left, +2 lines down
+	add $80-34	; 34 columns left, +2 lines down
 	jp nc,.skip2
 	inc D
 .skip2:	ld E,A
 	inc D		; +4 lines down
-.l10:	POP HL
-	DEC C
-	JP NZ,LACF7
-	EX DE,HL
-	POP DE
-	INC DE
-	JP LACD5
+	dec c
+	jp nz,.rowloop
 LAD1D:
-	POP DE
 	LD HL,LAD4A	; Indicator messages address
 	CALL PRSTRS	; Print string "PAY : $ XXXXX"
 	DEFW SCRIND+$0007
@@ -2770,7 +2871,7 @@ LB34B:	ld A,(HL)
 	xor B
 	ld (HL),A
 ; Change Console color in NEAR, so we see that console action worked
-LB350:	ld HL,SCRIND+$1B00 ; NEAR screen address
+LB350:	ld HL,SCRIND+$001B ; NEAR screen address
 	ld c,4		; 4 columns
 .l10:	ld b,24		; 24 lines
 	push hl
@@ -2968,7 +3069,7 @@ LB4ED:	dec b
 	jp nz,INCPAY
 	LD HL,LAD52	; Pay value text address
 	LD C,5		; five digits
-	LD DE,SCRIND+$000F ; Screen address
+	LD DE,SCRIND+15 ; Screen address
 	JP PRSTR	; => Print string, and RET
 
 ; Processing in initial room / room with pier - moving waves
@@ -3110,6 +3211,7 @@ LB5F5:	LD (HL),A
 	INC HL
 	dec b
 	jp nz,LB5F5
+	CALL SHOWTITLE
 	CALL LACCA	; Draw game screen frames and indicator text
 	XOR A
 	;LD ($5C48),A	; set BORDCR = 0
@@ -3400,6 +3502,7 @@ RTOK80:	inc HL
 ; Called to finish room initialization from room initialization procedure
 LA0E5:			; redirect - Standard room initialization
 LB422:			; redirect - Standard room initialization (for 60 rooms)
+LF973:			; Room 84A8 initialization - crane is in room sequence now
 LB724:
 	LD HL,TLSCR1	; Tile screen 1 start address
 	ld A,$01	; Filler = $01 = "need update" mark
@@ -3479,14 +3582,14 @@ LB7B6:	LD HL,TIMODE	; Time mode address
 	LD (HL),A	; set Time mode = BOMB ticking mode
 	LD HL,LBD2F	; "BOMB"
 	CALL PRSTRS	; Print string "BOMB"
-	DEFW SCRIND+$1618 ; screen address under timer value
+	DEFW SCRIND+$0618 ; screen address under timer value
 	DEFB 4
 LB7CA:	LD HL,$3939	; !!MUT-ARG!! "99" bomb timer initial value
 	LD (LAD57),HL	; set Indicator Time value
 	LD A,$01
 	LD (TIMECN),A
 ; Highlight the time indicator
-	ld hl,SCRIND+$1618 ; screen address
+	ld hl,SCRIND+$0618 ; screen address
 	ld c,4
 .l10:	ld b,8
 	push hl
@@ -4429,7 +4532,7 @@ LBEB3:	LD HL,LBEEF	; !!MUT-ARG!! two-line message address
 	DEFW SCRTOP+$0408 ; screen address
 	DEFB $0F
 	CALL PRSTRS	; Print string 2nd line
-	DEFW SCRTOP+$0606 ; screen address
+	DEFW SCRTOP+$0806 ; screen address
 	DEFB $14
 ;
 	CALL LF9B9	; Pause, then wait for any key pressed
@@ -4503,24 +4606,26 @@ LBFD5:	CALL INCPAYS	; Increase PAY value by 1000 - Escape by Helicopter
 ;
 	LD HL,LC062	; Messages address
 	CALL PRSTRS	; Print string "DISK RETRIEVED"
-	DEFW SCRTOP+$0928 ; Screen address
+	DEFW SCRTOP+$0600+9 ; Screen address
 	DEFB $0E
 	CALL PRSTRS	; Print string "DISK BONUS: $05000"
-	DEFW SCRTOP+$0858
+	DEFW SCRTOP+$0E00+8
 	DEFB $12
+	ld HL,LC082
 	CALL PRSTRS	; Print string "LEVEL N"
-	DEFW SCRTOP+$0568
+	DEFW SCRTOP+$1200+5
 	DEFB 7
+	ld HL,LC087
 	CALL PRSTRS	; Print string "TOTAL PAY : $"
-	DEFW SCRTOP+$0298
+	DEFW SCRTOP+$180*19+2
 	DEFB $0D
 	LD HL,LC075	; Messages address
 	CALL PRSTRS	; Print string "BONUS: $05000"
-	DEFW SCRTOP+$0D68
+	DEFW SCRTOP+$1200+13
 	DEFB $0D
 	LD HL,LE388	; level bonus string
 	CALL PRSTRS	; Print string
-	DEFW SCRTOP+$1568
+	DEFW SCRTOP+$1200+21
 	DEFB 3
 	LD A,(LE38B)
 	LD B,A
@@ -5425,6 +5530,7 @@ LDF4C:	;PUSH DE
 ; Main menu
 LDF60:	;ei
 	CALL LDEC1	; Clear strings on the screen
+	CALL SHOWTITLE
 	LD HL,TITLE	; Menu messages address
 	CALL PRSTRS	; Print title string
 	DEFW SCRTOP+$020D
@@ -5797,25 +5903,6 @@ LE48A:	;DEC BC
 
 ;----------------------------------------------------------------------------
 
-; Room 84A8 initialization
-LF973:	LD HL,TLSCR0+74	; tile screen address
-	LD DE,LF98F	; block address
-	LD C,$06	; 6 rows
-LF97B:	LD B,$03	; 3 columns
-LF97D:	LD A,(DE)
-	LD (HL),A
-	INC HL
-	INC DE
-	dec b
-	jp nz,LF97D
-	PUSH DE
-	LD DE,$001B
-	ADD HL,DE
-	POP DE
-	DEC C
-	JP NZ,LF97B
-	JP LB422
-
 ; Noise sound
 ; B = how long
 LF9A1:	ld a,b
@@ -5900,12 +5987,6 @@ LFA31:	CALL NRJDEC	; Decrease Energy by B
 
 ;----------------------------------------------------------------------------
 
-; Game frame with indicators + tiles, 157 + 207 = 364 bytes
-	INCLUDE "sabot1in.asm"
-
-; Items, 1080 bytes
-	INCLUDE "sabot1it.asm"
-
 ; Rooms
 Sabot1RoomsBegin:
 	INCLUDE "sabot1rm.asm"
@@ -5914,10 +5995,14 @@ Sabot1RoomsEnd:
 Sabot1RoomsSize EQU Sabot1RoomsEnd - Sabot1RoomsBegin
 	DISPLAY "Rooms size: ", /A, Sabot1RoomsSize
 
-;----------------------------------------------------------------------------
-
 ; Font, 472 bytes
 	INCLUDE "sabot1ft.asm"
+; Game frame with indicators + tiles, 222 bytes
+	INCLUDE "sabot1in.asm"
+; Items, 1080 bytes
+	INCLUDE "sabot1it.asm"
+; Title picture, 652 bytes
+TPICT:	INCBIN "sabot1ti.zx0"
 
 ; Front tiles, 124 tiles, 12 bytes each
 	INCLUDE "sabot1t1.asm"
@@ -5938,24 +6023,29 @@ Sabot1Tiles1Gap EQU Sabot1Tiles1B - Sabot1Tiles1End
 	DEFS 30*8
 	INCLUDE "sabot1t3.asm"
 
+Sabot1MainEnd:
+	DISPLAY "Code/data end: ", /A, Sabot1MainEnd
+
 ;----------------------------------------------------------------------------
+
 
 ; Tile screen 0 30x17 tiles, 510 bytes - background
-TLSCR0:	DEFS	510
+TLSCR0 = Sabot1MainEnd
 ; Tile screen 1 30x17 tiles, 510 bytes - update flags
-TLSCR1:	DEFS	510
+TLSCR1 = TLSCR0 + 510
 ; Tile screen 2 30x17 tiles, 510 bytes - Ninja screen
-TLSCR2:	DEFS	510
+TLSCR2 = TLSCR1 + 510
 ; Tile screen 3 30x17 tiles, 510 bytes - Dog screen
-TLSCR3:	DEFS	510
+TLSCR3 = TLSCR2 + 510
 ; Tile screen 4 30x17 tiles, 510 bytes - Guard screen
-TLSCR4:	DEFS	510
+TLSCR4 = TLSCR3 + 510
 ; Tile screen 5 30x17 tiles, 510 bytes - front
-TLSCR5:	DEFS	510
+TLSCR5 = TLSCR4 + 510
+
+Sabot1End = TLSCR5 + 510:
+	ASSERT Sabot1End <= $7FFF
 
 ;----------------------------------------------------------------------------
-Sabot1End:
-	ASSERT Sabot1End <= $7F00
 	DISPLAY "Top address: ", /A, Sabot1End
 	OUTEND
 	END
