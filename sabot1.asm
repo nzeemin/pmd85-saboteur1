@@ -797,78 +797,10 @@ dzx0_ldir1:
 
 ;----------------------------------------------------------------------------
 
-; Show title picture (two ninjas)
-L6289:
-	LD HL,L62DB	; Encoded picture data address
-	LD DE,TLSCR0	; Tile screens address, used as a buffer
-; Decode new RLE sequence
-; HL = source, DE = destination buffer
-L628F:
-	LD A,(HL)	; load next control/data byte
-	INC HL		; advance source pointer
-	CP $FF		; end of sequence?
-	JP Z,L62A9	; => done, copy buffer to screen
-	LD C,A		; stash original byte; C free until next iteration
-	AND $80		; test bit 7
-	JP NZ,L_BIT7SET
-	; bits 7,6 both clear OR only bit 6 set
-	LD A,C
-	AND $40		; test bit 6
-	JP NZ,L_BLOCKCOPY
-	; 00xxxxxx - literal byte
-	LD A,C
-	or $40		; gray color
-	LD (DE),A
-	INC DE
-	JP L628F
-; --- 1xxxxxxx: bit 7 set ---
-L_BIT7SET:
-	LD A,C
-	AND $40		; test bit 6
-	JP NZ,L_SPECIAL ; 11xxxxxx -> special pattern
-	; 10xxxxxx - filler: bits 0-5 = fill value, next byte = count
-	LD A,C
-	AND $3F		; A = fill byte value (stays in A across loop)
-	LD B,(HL)	; B = repeat count (3..255)
-	INC HL
-L_FILLLOOP:
-	or $40		; gray color
-	LD (DE),A	; A unchanged by INC/DEC
-	INC DE
-	DEC B
-	JP NZ,L_FILLLOOP
-	JP L628F
-; --- 01xxxxxx: block copy, bits 0-5 = byte count (3..63) ---
-L_BLOCKCOPY:
-        LD A,C
-        AND $3F		; count
-        LD B,A
-L_BLKLOOP:
-        LD A,(HL)
-	or $40		; gray color
-        LD (DE),A
-        INC HL
-        INC DE
-        DEC B
-        JP NZ,L_BLKLOOP
-        JP L628F
-; --- 11xxxxxx: alternating 0x2A/0x15 pattern, count = (bits 0-5)+1 ---
-L_SPECIAL:
-	LD A,C
-	AND $3F		; bits 0-5
-	INC A		; count: 1..64
-	LD B,A
-	LD C,$6A	; seed: 0x6A (01101010)
-L_PATLOOP:
-	LD A,C
-	LD (DE),A
-	INC DE
-	XOR $3F		; 0x2A^0x3F=0x15, 0x15^0x3F=0x2A
-	LD C,A
-	DEC B
-	JP NZ,L_PATLOOP
-	JP L628F
-;
+; Show menu picture (two ninjas)
+L6289:	LD DE,L62DB	; ZX0 encoded picture data address
+	ld BC,TLSCR0	; destination addr (using TLSCR0 as buffer)
+	call dzx0
 ; Buffer is ready, copy to screen
 L62A9:	LD HL,SCRMP	; Screen address
  	LD DE,TLSCR0	; Tile data address
@@ -5997,37 +5929,43 @@ Sabot1RoomsSize EQU Sabot1RoomsEnd - Sabot1RoomsBegin
 
 ; Font, 472 bytes
 	INCLUDE "sabot1ft.asm"
-; Game frame with indicators + tiles, 222 bytes
-	INCLUDE "sabot1in.asm"
 ; Items, 1080 bytes
 	INCLUDE "sabot1it.asm"
-; Title picture, 652 bytes
-TPICT:	INCBIN "sabot1ti.zx0"
+; Menu picture (two ninjas), ZX0 encoded, 503 bytes
+L62DB:	INCBIN "sabot1mp.zx0"
 
 ; Front tiles, 124 tiles, 12 bytes each
 	INCLUDE "sabot1t1.asm"
-Sabot1Tiles1End:	; Gap of $07DD bytes starts here
+Sabot1Tiles1End:	; Gap of 118*12 bytes starts here
 
-; Title picture (two ninjas), RLE encoded, 687 bytes
-	INCLUDE "sabot1mp.asm"
-
+; Title picture, 652 bytes
+TPICT:	INCBIN "sabot1ti.zx0"
 ; Sprites, 729 bytes
 	INCLUDE "sabot1sp.asm"
 
+	DEFS 35		; FILLER
 Sabot1Tiles1B:
 Sabot1Tiles1Gap EQU Sabot1Tiles1B - Sabot1Tiles1End
-	;DISPLAY "Sabot1Tiles1Gap: ", /A, Sabot1Tiles1Gap
-	ASSERT Sabot1Tiles1Gap == 118*12 ; Make sure second part of tiles properly aligned
+	DISPLAY "Sabot1Tiles1Gap: ", /A, Sabot1Tiles1Gap
+	ASSERT Sabot1Tiles1Gap == 1416  ; Make sure second part of tiles properly aligned
 	INCLUDE "sabot1t1b.asm"
 	INCLUDE "sabot1t2.asm"
-	DEFS 30*8
+Sabot1Tiles2End:	; Gap of 30*8 bytes starts here
+
+	; Game frame with indicators + tiles, 222 bytes
+	INCLUDE "sabot1in.asm"
+
+	DEFS 18		; FILLER
+Sabot1Tiles2B:
+Sabot1Tiles2Gap EQU Sabot1Tiles2B - Sabot1Tiles2End
+	;DISPLAY "Sabot1Tiles2Gap: ",/A, Sabot1Tiles2Gap
+	ASSERT Sabot1Tiles2Gap == 240  ; Make sure second part of tiles properly aligned
 	INCLUDE "sabot1t3.asm"
 
 Sabot1MainEnd:
 	DISPLAY "Code/data end: ", /A, Sabot1MainEnd
 
 ;----------------------------------------------------------------------------
-
 
 ; Tile screen 0 30x17 tiles, 510 bytes - background
 TLSCR0 = Sabot1MainEnd
