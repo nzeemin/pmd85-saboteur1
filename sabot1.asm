@@ -4,7 +4,12 @@
 	ORG	0
 SABOT1CODE_START:
 	di
-	JP	LF9E7
+	;JP	LF9E7
+; Start point after loading
+LF9E7:	ld SP,$C000
+	CALL LBC13	; Clear screen, show title picture
+LF9F4:	jp LF913
+	;JP LF9F4
 
 ;----------------------------------------------------------------------------
 
@@ -72,8 +77,8 @@ L7345:	DEFB $14	; Dog ??
 GARDST:	DEFB $0A	; Guard walking phase $00..$03 or other state: $09 = Guard dead; ...
 GARDDIR: DEFB $01	; Guard direction
 
-NRJ:	DEFB $13	; Energy $04..$13
-NRJLO:	DEFB $01	; Energy lower, running bit
+NRJ:	DEFB $13	; Energy $05..$13; $04 = dead
+NRJLO:	DEFB $80	; Energy lower, running bit: MIN $01,$02..$40,$80 MAX
 
 LA39E:	DEFB $00	; ?? 0 / 1
 
@@ -1119,27 +1124,32 @@ L7485:	ld a,$3F	; filler
 	jp nz,L7481
 	LD A,$13
 L7492:	LD (NRJ),A	; set Energy = MAX
-	LD A,$01
-L7497:	LD (NRJLO),A
+	LD A,$80
+L7497:	LD (NRJLO),A	; set Energy low = MAX
 	RET
 
 ; Decreasing Energy
-L749E:	ld hl,SCRIND+$0306 ; screen address for line start + 1
+L749E:	ld hl,SCRIND+$0386-5 ; screen address for line start + 1
 	LD A,(NRJ)	; get Energy
-	ld d,a
-	ld e,$00
+	ld E,a
+	ld D,$00
 	add hl,de	; HL = screen address
-	LD B,16
+	LD B,10
 	LD A,(NRJLO)
 	LD C,A
 L74B2:	LD A,C
 	XOR (HL)
+	and $3F
 	LD (HL),A
-	inc l		; line down
+	ld A,L
+	add $40	; line down
+	jp nc,.skipc
+	inc H
+.skipc:	ld L,A
 	dec b
 	jp nz,L74B2
 	LD A,(NRJLO)
-	rlca
+	rrca
 	LD (NRJLO),A
 	RET NC
 	LD HL,NRJ	; Energy address
@@ -1407,9 +1417,9 @@ NRJDEC:	RET		; !!MUT-CMD!! $C5 PUSH BC or $C9 RET
 	LD A,(NRJ)	; get Energy
 	CP $04		; Energy = MIN ?
 	JP NZ,L9DF1
-	LD A,(NRJLO)	; get Energy lower
-	CP $01
-	JP NZ,L9DF1
+	;LD A,(NRJLO)	; get Energy lower
+	;CP $01		; Energy low = MIN ?
+	;JP NZ,L9DF1
 L9DEC:	JP LBEAA	; !!MUT-CMD!! Energy is out => Saboteur dead
 L9DF1:	dec b
 	jp nz,NRJDEC	; continue loop by B
@@ -2356,6 +2366,33 @@ PRSTRB:
 .l60:	inc D		; 4 lines lower
 	inc D		; 8 lines lower
 	jp .l50
+
+; Print string, clear one line above and beyond the text
+; C  = Length
+; HL = string address
+; DE = screen address
+PRSTR_framed:
+	push HL		; save string address
+	push DE
+	push BC
+	ld A,C
+	ld HL,-$40
+	add HL,DE	; one line up
+	ex HL,DE
+	ld BC,$40*6
+	add HL,BC	; 6 string down
+	ld B,A
+	xor A
+.loop:	ld (DE),A	; clear byte on the screen
+	ld (HL),A
+	inc E		; next column
+	inc L
+	dec B
+	jp nz,.loop
+	pop BC
+	pop DE
+	pop HL		; restore string address
+	jp PRSTR
 
 ; Print string on the screen, two arguments after the CALL statement
 ; 1st word = screen address, 2nd byte = length
@@ -3586,7 +3623,7 @@ LB833:	LD A,(DE)	; get byte +$04/$05/$06
 
 ; Increase Energy a bit
 LB83C:	LD A,(NRJLO)	; get Energy lower
-	rrca
+	rlca
 	LD (NRJLO),A	; set Energy lower
 	RET NC
 	LD HL,NRJ	; Energy address
@@ -4158,7 +4195,7 @@ LBC55:
 	CP $13		; energy at MAX?
 	JP NZ,LBC6B
 	LD A,(NRJLO)	; get Energy lower
-	CP $01
+	CP $80		; Energy low at MAX?
 	JP Z,LBC76
 LBC6B:	CALL LB83C	; Increase Energy a bit
 	LD B,$01
@@ -4460,12 +4497,12 @@ LBEAA:	POP HL
 
 ; Movement handler: Game Over
 LBEB3:	LD HL,LBEEF	; !!MUT-ARG!! two-line message address
-	CALL PRSTRS	; Print string 1st line
-	DEFW SCRTOP+$0408 ; screen address
-	DEFB $0F
-	CALL PRSTRS	; Print string 2nd line
-	DEFW SCRTOP+$0806 ; screen address
-	DEFB $14
+	ld DE,SCRTOP+$0408 ; screen address
+	ld C,$0F
+	CALL PRSTR_framed ; Print string 1st line
+	ld DE,SCRTOP+$0806 ; screen address
+	ld C,$14
+	CALL PRSTR_framed ; Print string 2nd line
 ;
 	CALL LF9B9	; Pause, then wait for any key pressed
 	;NOP
@@ -5869,15 +5906,6 @@ LF9BF:	dec b
 	call WaitNoInput
 	jp WaitAnyInput
 
-; Routine at F9E4
-;LF9E4:	CALL TLSCR0	; Prepare screen, show anti-piracy message, and wait for any key
-
-; Start point after loading
-LF9E7:	ld SP,$C000
-	CALL LBC13	; Clear screen, show title picture
-LF9F4:	jp LF913
-	;JP LF9F4
-
 ; Routine at F9F9
 LF9F9:	LD HL,$00B4
 	LD B,$01
@@ -5946,7 +5974,7 @@ TPICT:	INCBIN "sabot1ti.zx0"
 	DEFS 35		; FILLER
 Sabot1Tiles1B:
 Sabot1Tiles1Gap EQU Sabot1Tiles1B - Sabot1Tiles1End
-	DISPLAY "Sabot1Tiles1Gap: ", /A, Sabot1Tiles1Gap
+	;DISPLAY "Sabot1Tiles1Gap: ", /A, Sabot1Tiles1Gap
 	ASSERT Sabot1Tiles1Gap == 1416  ; Make sure second part of tiles properly aligned
 	INCLUDE "sabot1t1b.asm"
 	INCLUDE "sabot1t2.asm"
@@ -5963,7 +5991,7 @@ Sabot1Tiles2Gap EQU Sabot1Tiles2B - Sabot1Tiles2End
 	INCLUDE "sabot1t3.asm"
 
 Sabot1MainEnd:
-	DISPLAY "Code/data end: ", /A, Sabot1MainEnd
+	;DISPLAY "Code/data end: ", /A, Sabot1MainEnd
 
 ;----------------------------------------------------------------------------
 
