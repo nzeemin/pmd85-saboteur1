@@ -180,18 +180,18 @@ MIRROR:
 	ASSERT (MIRROR AND $FF) == 0
 ;
 ; Screen addresses for every 17 rows, used for Explosion drawing
-LBAB3:	DEFW SCRGME+$00,SCRGME+$08,SCRGME+$10,SCRGME+$18
-	DEFW SCRGME+$20,SCRGME+$28,SCRGME+$30,SCRGME+$38
-	DEFW SCRGME+$40,SCRGME+$48,SCRGME+$50,SCRGME+$58
-	DEFW SCRGME+$60,SCRGME+$68,SCRGME+$70,SCRGME+$78
-	DEFW SCRGME+$80
+LBAB3:	DEFW SCRGME+$180*0,SCRGME+$180*1,SCRGME+$180*2,SCRGME+$180*3
+	DEFW SCRGME+$180*4,SCRGME+$180*5,SCRGME+$180*6,SCRGME+$180*7
+	DEFW SCRGME+$180*8,SCRGME+$180*9,SCRGME+$180*10,SCRGME+$180*11
+	DEFW SCRGME+$180*12,SCRGME+$180*13,SCRGME+$180*14,SCRGME+$180*15
+	DEFW SCRGME+$180*16
 	; Make sure the LBAB3 table properly aligned, so lower byte is 0
 	ASSERT (LBAB3 AND $FF) == 0
 
 ; Table of game screen rows addresses, 10 rows, for auto-gun drawings
-LA747:	DEFW SCRGME+$15,SCRGME+$1D,SCRGME+$25,SCRGME+$2D
-	DEFW SCRGME+$35,SCRGME+$3D,SCRGME+$45,SCRGME+$4D
-	DEFW SCRGME+$55,SCRGME+$5D
+LA747:	DEFW SCRGME+$180*3-$40,SCRGME+$180*4-$40,SCRGME+$180*5-$40,SCRGME+$180*6-$40
+	DEFW SCRGME+$180*7-$40,SCRGME+$180*8-$40,SCRGME+$180*9-$40,SCRGME+$180*10-$40
+	DEFW SCRGME+$180*11-$40,SCRGME+$180*12-$40
 
 ; Guards data, 24 records, 6 bytes each
 ; +$04: Guard state, initially $0A
@@ -569,7 +569,7 @@ LE3C8	DEFB $0E,$0A,$23
 ; Level 5 "MODERATE"
 LE3DC	DEFB $0C,$09,$1E
 	DEFM "9070"
-	DEFB $FF,$0E,$0E,$26,$0E
+	DEFB $FF,$0E,$0E,$27,$0E
 	DEFM " 70"
 	DEFB $46
 	DEFW L8689
@@ -577,7 +577,7 @@ LE3DC	DEFB $0C,$09,$1E
 ; Level 6 "SLIGHTLY HARD"
 LE3F0	DEFB $0A,$07,$19
 	DEFM "8560"
-	DEFB $FF,$26,$0E,$26,$0E
+	DEFB $FF,$26,$0E,$27,$0E
 	DEFM "100"
 	DEFB $64
 	DEFW L8BAB
@@ -585,7 +585,7 @@ LE3F0	DEFB $0A,$07,$19
 ; Level 7 "HARD"
 LE404	DEFB $08,$06,$14
 	DEFM "8550"
-	DEFB $FF,$26,$27,$26,$0E
+	DEFB $FF,$26,$27,$27,$0E
 	DEFM "130"
 	DEFB $82
 	DEFW L8D5C
@@ -593,7 +593,7 @@ LE404	DEFB $08,$06,$14
 ; Level 8 "VERY HARD"
 LE418	DEFB $05,$05,$0F
 	DEFM "8050"
-	DEFB $FF,$26,$27,$26,$28
+	DEFB $FF,$26,$27,$27,$28
 	DEFM "170"
 	DEFB $AA
 	DEFW L8279
@@ -601,7 +601,7 @@ LE418	DEFB $05,$05,$0F
 ; Level 9 "EXTREMELY HARD"
 LE42C:	DEFB $02,$03,$0A
 	DEFM "7040"
-	DEFB $FF,$26,$27,$26,$28
+	DEFB $FF,$26,$27,$27,$28
 	DEFM "250"
 	DEFB $FA
 	DEFW L8608
@@ -1779,8 +1779,8 @@ LA440:	LD HL,GARDCN	; Guard counter address
 	ld h,(hl)
 	ld l,a		; now HL = address on the screen
 	LD A,(GARDX)	; get Guard X
-	add a,h
-	ld h,a
+	add a,l
+	ld l,a
 	LD DE,$003C	; +60 = two rows
 	LD A,(GARDX)	; get Guard X
 	INC A
@@ -1790,7 +1790,7 @@ LA440:	LD HL,GARDCN	; Guard counter address
 	EX DE,HL	; now DE = Guard position + two rows
 	POP HL		; restore screen address
 	LD B,A
-	ld a,$25	; "dec h" instruction
+	ld a,$2D	; "dec l" instruction
 	LD (LA4D0),A	; set the instruction
 	LD A,$1B	; "DEC DE" instruction
 	LD (LA4D1),A	; set the instruction
@@ -1805,12 +1805,12 @@ LA440:	LD HL,GARDCN	; Guard counter address
 	INC DE
 	INC DE
 	INC DE		; +5
-	inc h
-	inc h
-	inc h
-	inc h
-	inc h		; +5
-	ld a,$24	; "inc h" instruction
+	inc l
+	inc l
+	inc l
+	inc l
+	inc l		; +5
+	ld a,$2C	; "inc l" instruction
 	LD (LA4D0),A	; set the instruction
 	LD A,$13	; "INC DE" instruction
 	LD (LA4D1),A	; set the instruction
@@ -1842,7 +1842,7 @@ LA4C0:	LD HL,TLSCR2	; Tile screen 2 start address
 	CALL NRJDEC	; Decrease Energy by B
 LA4CD:	LD B,$01
 LA4CF:	POP HL		; restore screen address
-LA4D0:	dec h		; !!MUT-CMD!! "dec h" or "inc h" instruction
+LA4D0:	dec l		; !!MUT-CMD!! "dec l" or "inc l" instruction
 LA4D1:	DEC DE		; !!MUT-CMD!! "DEC DE" or "INC DE" instruction
 	dec b
 	jp nz,LA4A2
@@ -2826,7 +2826,7 @@ LB32A:	ld HL,L97CF+1
 	jp LB34B	; XOR and => Change Console color in NEAR
 ; Object procedure: flip trigger "C": set/remove wall in room 8D5C
 LB334:	ld HL,L8DBB
-	ld B,$28	; value for XOR, to switch token $0E/$26
+	ld B,$29	; value for XOR, to switch token $0E/$27
 	jp LB34B	; XOR and => Change Console color in NEAR
 ; Object procedure: flip trigger "B": set/remove wall in room 8F20
 LB33E:	ld HL,L8F31
@@ -3964,8 +3964,8 @@ LBAF0:	LD HL,LBAB2	; Explosion counter address
 	ld h,(hl)
 	ld l,a		; now HL = screen address of the row beginning
 	ld a,(LA39F+6)	; get object X
-	add a,h
-	ld h,a		; now HL = screen address
+	add a,l
+	ld l,a		; now HL = screen address
 	LD (LBA57+1),HL	; set screen address
 	LD B,3		; height, rows, initial
 	LD C,3		; width, columns, initial
@@ -4031,12 +4031,17 @@ LBA63:	PUSH HL
 LBA67:	LD A,(DE)	; get pixels
 	LD (HL),A	; put to screen
 	INC DE
-	dec l 		; line down
+	LD A,L
+	ADD A,$40	; line down (PMD85 microline stride)
+	LD L,A
+	JP NC,LBA67_1
+	INC H
+LBA67_1:
 	dec b
 	jp nz,LBA67
 	POP BC
 	POP HL
-	inc h		; next column
+	inc l		; next column
 	DEC C
 	JP NZ,LBA63
 	POP DE
@@ -4044,9 +4049,8 @@ LBA67:	LD A,(DE)	; get pixels
 	ADD HL,DE
 	EX DE,HL
 	POP HL		; restore screen address
-	ld a,l
-	sub 8		; 8 lines down
-	ld l,a
+	INC H		; 8 lines down (8 * $40 = $200, L unchanged)
+	INC H
 	dec b
 	jp nz,LBA5F
 ;NOTE: Screen attributes change removed
@@ -5698,16 +5702,16 @@ LE343:	ex de,hl
 	LD (L97CF+1),A	; set flag for wall in room 97A6
 	INC HL
 	LD A,(HL)
-	LD (L9755+1),A	; set count for wall in room 9739
+	LD (L9755),A	; set token for wall in room 9739
 	INC HL
 	LD A,(HL)
-	LD (L7F7A+1),A	; set count for wall in room 7F48
+	LD (L7F7A),A	; set token for wall in room 7F48
 	INC HL
 	LD A,(HL)
-	LD (L8DBB+1),A	; set count for wall in room 8D5C
+	LD (L8DBB),A	; set token for wall in room 8D5C
 	INC HL
 	LD A,(HL)
-	LD (L8F31+1),A	; set count for wall in room 8F20
+	LD (L8F31),A	; set token for wall in room 8F20
 	INC HL
 	ld b,$04
 	LD DE,LE388
