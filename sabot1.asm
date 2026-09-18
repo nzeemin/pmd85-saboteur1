@@ -6,7 +6,7 @@ SABOT1CODE_START:
 	di
 	;JP	LF9E7
 ; Start point after loading
-LF9E7:	ld SP,$C000
+LF9E7:	ld SP,$8000
 	CALL LBC13	; Clear screen, show title picture
 LF9F4:	jp LF913
 	;JP LF9F4

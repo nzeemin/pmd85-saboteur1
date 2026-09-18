@@ -20,8 +20,7 @@ if ERRORLEVEL 1 goto Failed
 tools\salvador.exe -classic sabot1.bin sabot1.zx0
 @if errorlevel 1 goto Failed
 
-rem tools\quido -ptp -i8080 -a 0 -ja 0 -vram -ra 0xC030 -n SABOTEUR %FILENAME%.bin
-tools\quido -ptp -i8080 -a 0 -ja 0 -n SABOTEUR %FILENAME%.bin
+tools\bin2ptp -a 0 -n 0 -m SABOTEUR -o %FILENAME%.ptp %FILENAME%.bin
 if ERRORLEVEL 1 goto Failed
 
 tools\makepsn.exe -psn template.psn -reg PC 0 -mem 0 %FILENAME%.bin -o %FILENAME%.psn
